@@ -97,6 +97,12 @@ body {
     width: 0;
 }
 
+.loading {
+    display: none;
+    font-size: 18px;
+    color: #666;
+}
+
 @keyframes pulse {
     0% {
         transform: scale(1);

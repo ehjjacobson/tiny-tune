@@ -103,18 +103,21 @@ app.get('/', (req, res) => {
                 p { font-size: 18px; color: #666; }
                 .btn { display: inline-block; margin-top: 20px; padding: 10px 20px; font-size: 16px; background-color: #1db954; color: white; text-decoration: none; border-radius: 5px; }
                 .btn:hover { background-color: #1aa34a; }
+                .loading { display: none; font-size: 18px; color: #666; }
             </style>
         </head>
         <body>
             <h1>Welcome to Tiny Tune</h1>
+            <div class="loading" id="loading">Processing authentication...</div>
             ${isAuthenticated ? `
                 <p>You are logged in with Spotify.</p>
                 <p>Enjoy exploring your music and see what you're currently playing!</p>
                 <a href="/logout" class="btn">Logout</a>
             ` : `
                 <p>See what you're currently playing on Spotify!</p>
-                <a href="/login" class="btn">Login with Spotify</a>
+                <a href="/login" class="btn" id="login-button">Login with Spotify</a>
             `}
+            <script src="/public/script.js"></script>
         </body>
         </html>
     `);

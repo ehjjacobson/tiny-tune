@@ -39,3 +39,15 @@ async function fetchNowPlaying() {
 
 fetchNowPlaying();
 setInterval(fetchNowPlaying, 60000);
+
+document.addEventListener("DOMContentLoaded", () => {
+    const loginButton = document.getElementById("login-button");
+    const loadingText = document.getElementById("loading");
+
+    if (loginButton) {
+        loginButton.addEventListener("click", () => {
+            loginButton.style.display = "none";
+            loadingText.style.display = "block";
+        });
+    }
+});
