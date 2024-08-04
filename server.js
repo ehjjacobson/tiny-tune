@@ -60,11 +60,25 @@ const refreshAccessToken = async () => {
 
         if (response.data.access_token) {
             access_token = response.data.access_token;
-            expires_in = response.data.expires_in || 1800;
+            expires_in = response.data.expires_in || 1800; // Default to 1800 seconds if not provided
             token_received_time = Math.floor(Date.now() / 1000);
+            const refresh_token_last_used = token_received_time;
+
             console.log('Access token refreshed:', access_token);
 
-            await tokensCollection.updateOne({}, { $set: { access_token, refresh_token, token_received_time, expires_in } }, { upsert: true });
+            await tokensCollection.updateOne(
+                {},
+                {
+                    $set: {
+                        access_token,
+                        refresh_token,
+                        token_received_time,
+                        expires_in,
+                        refresh_token_last_used
+                    }
+                },
+                { upsert: true }
+            );
         } else {
             console.error('Failed to refresh access token:', response.data);
         }
