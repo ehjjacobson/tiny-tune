@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tiny Tune Widget</title>
+    <link rel="stylesheet" href="/public/styles.css">
+</head>
+<body>
+    <div id="now-playing">
+        <a id="spotify-link" href="#" target="_blank" class="player-link">
+            <div class="player-container">
+                <img id="album-cover" src="" alt="Album Cover" class="album-cover">
+                <div class="track-info">
+                    <div class="live-indicator">
+                        <span class="live-dot"></span>
+                        <span class="live-text">Currently listening to</span>
+                    </div>
+                    <h3 id="track-title">Track Title</h3>
+                    <p id="artist-name">Artist Name</p>
+                    <div class="progress-bar-container">
+                        <div id="progress-time" class="progress-time">0:00</div>
+                        <div class="progress-bar-wrapper">
+                            <div id="progress-bar" class="progress-bar"></div>
+                        </div>
+                        <div id="track-duration" class="track-duration">0:00</div>
+                    </div>
+                </div>
+            </div>
+        </a>
+        <div id="loading-skeleton" class="skeleton-container">
+            <div class="skeleton album-cover-skeleton"></div>
+            <div class="skeleton-info">
+                <div class="skeleton title-skeleton"></div>
+                <div class="skeleton artist-skeleton"></div>
+                <div class="skeleton progress-bar-skeleton"></div>
+            </div>
+        </div>
+    </div>
+    <script src="/public/script.js"></script>
+</body>
+</html>
