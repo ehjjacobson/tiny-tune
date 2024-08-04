@@ -33,12 +33,7 @@ async function fetchNowPlaying() {
                         checkForNewSong();
                     }
                 }, 1000);
-            } else {
-                // Handle paused state
-                clearInterval(intervalId);
-                document.getElementById('progress-bar').style.width = '0%';
-                document.getElementById('progress-time').textContent = 'Paused';
-            }
+            } 
         } else {
             document.getElementById('now-playing').style.display = 'none';
         }
