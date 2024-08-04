@@ -17,8 +17,9 @@ async function fetchNowPlaying() {
 
             document.getElementById('progress-bar').style.width = `${(data.progress_ms / data.item.duration_ms) * 100}%`;
 
-            // Hide skeleton loading
+            // Hide the skeleton loader and show the player
             document.getElementById('loading-skeleton').style.display = 'none';
+            document.getElementById('now-playing').style.display = 'block';
 
             // Update progress every second
             setInterval(() => {
@@ -32,10 +33,14 @@ async function fetchNowPlaying() {
                 }
             }, 1000);
         } else {
+            // Hide the skeleton loader if there's no data
+            document.getElementById('loading-skeleton').style.display = 'none';
             document.getElementById('now-playing').style.display = 'none';
         }
     } catch (error) {
         console.error('Error fetching now-playing data:', error);
+        // Hide the skeleton loader if an error occurs
+        document.getElementById('loading-skeleton').style.display = 'none';
         document.getElementById('now-playing').style.display = 'none';
     }
 }
