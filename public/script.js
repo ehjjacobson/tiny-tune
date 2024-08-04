@@ -1,5 +1,6 @@
 let currentProgressMs = 0;
 let intervalId;
+let lastFetchTime = 0;
 
 async function fetchNowPlaying() {
     try {
@@ -14,7 +15,9 @@ async function fetchNowPlaying() {
 
             currentProgressMs = data.progress_ms;
             const duration = data.item.duration_ms;
+            lastFetchTime = data.timestamp;
 
+            adjustProgressForDelay();
             updateProgress(currentProgressMs, duration);
 
             if (intervalId) clearInterval(intervalId);
@@ -24,7 +27,7 @@ async function fetchNowPlaying() {
                     updateProgress(currentProgressMs, duration);
                 } else {
                     clearInterval(intervalId);
-                    fetchNowPlaying();
+                    fetchNowPlaying(); // Fetch new song data
                 }
             }, 1000);
         } else {
@@ -34,6 +37,12 @@ async function fetchNowPlaying() {
         console.error('Error fetching now-playing data:', error);
         document.getElementById('now-playing').style.display = 'none';
     }
+}
+
+function adjustProgressForDelay() {
+    const currentTime = Date.now();
+    const delay = currentTime - lastFetchTime;
+    currentProgressMs += delay;
 }
 
 function updateProgress(progressMs, durationMs) {
@@ -48,4 +57,3 @@ function updateProgress(progressMs, durationMs) {
 }
 
 fetchNowPlaying();
-setInterval(fetchNowPlaying, 60000);
