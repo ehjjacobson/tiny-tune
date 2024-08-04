@@ -1,9 +1,5 @@
 async function fetchNowPlaying() {
     try {
-        // Show the skeleton loader
-        document.getElementById('loading-skeleton').style.display = 'flex';
-        document.getElementById('now-playing').style.display = 'none';
-
         const response = await fetch('/now-playing');
         const data = await response.json();
 
@@ -20,10 +16,6 @@ async function fetchNowPlaying() {
             document.getElementById('track-duration').textContent = `${Math.floor(duration / 60)}:${duration % 60 < 10 ? '0' : ''}${duration % 60}`;
 
             document.getElementById('progress-bar').style.width = `${(data.progress_ms / data.item.duration_ms) * 100}%`;
-
-            // Hide skeleton loading and show the widget
-            document.getElementById('loading-skeleton').style.display = 'none';
-            document.getElementById('now-playing').style.display = 'block';
 
             // Update progress every second
             setInterval(() => {
@@ -42,7 +34,6 @@ async function fetchNowPlaying() {
     } catch (error) {
         console.error('Error fetching now-playing data:', error);
         document.getElementById('now-playing').style.display = 'none';
-        document.getElementById('loading-skeleton').style.display = 'none'; // Hide the skeleton loader if there's an error
     }
 }
 
