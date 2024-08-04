@@ -1,3 +1,6 @@
+let currentProgressMs = 0;
+let intervalId;
+
 async function fetchNowPlaying() {
     try {
         const response = await fetch('/now-playing');
@@ -9,22 +12,18 @@ async function fetchNowPlaying() {
             document.getElementById('artist-name').textContent = data.item.artists[0].name;
             document.getElementById('spotify-link').href = data.item.external_urls.spotify;
 
-            const progress = Math.floor(data.progress_ms / 1000);
-            const duration = Math.floor(data.item.duration_ms / 1000);
+            currentProgressMs = data.progress_ms;
+            const duration = data.item.duration_ms;
 
-            document.getElementById('progress-time').textContent = `${Math.floor(progress / 60)}:${progress % 60 < 10 ? '0' : ''}${progress % 60}`;
-            document.getElementById('track-duration').textContent = `${Math.floor(duration / 60)}:${duration % 60 < 10 ? '0' : ''}${duration % 60}`;
+            updateProgress(currentProgressMs, duration);
 
-            document.getElementById('progress-bar').style.width = `${(data.progress_ms / data.item.duration_ms) * 100}%`;
-
-            // Update progress every second
-            setInterval(() => {
-                data.progress_ms += 1000;
-                if (data.progress_ms < data.item.duration_ms) {
-                    const currentProgress = Math.floor(data.progress_ms / 1000);
-                    document.getElementById('progress-time').textContent = `${Math.floor(currentProgress / 60)}:${currentProgress % 60 < 10 ? '0' : ''}${currentProgress % 60}`;
-                    document.getElementById('progress-bar').style.width = `${(data.progress_ms / data.item.duration_ms) * 100}%`;
+            if (intervalId) clearInterval(intervalId);
+            intervalId = setInterval(() => {
+                currentProgressMs += 1000;
+                if (currentProgressMs <= duration) {
+                    updateProgress(currentProgressMs, duration);
                 } else {
+                    clearInterval(intervalId);
                     fetchNowPlaying();
                 }
             }, 1000);
@@ -37,17 +36,16 @@ async function fetchNowPlaying() {
     }
 }
 
+function updateProgress(progressMs, durationMs) {
+    const progress = Math.floor(progressMs / 1000);
+    const duration = Math.floor(durationMs / 1000);
+
+    document.getElementById('progress-time').textContent = `${Math.floor(progress / 60)}:${progress % 60 < 10 ? '0' : ''}${progress % 60}`;
+    document.getElementById('track-duration').textContent = `${Math.floor(duration / 60)}:${duration % 60 < 10 ? '0' : ''}${duration % 60}`;
+
+    const progressPercentage = (progressMs / durationMs) * 100;
+    document.getElementById('progress-bar').style.width = `${progressPercentage}%`;
+}
+
 fetchNowPlaying();
 setInterval(fetchNowPlaying, 60000);
-
-document.addEventListener("DOMContentLoaded", () => {
-    const loginButton = document.getElementById("login-button");
-    const loadingText = document.getElementById("loading");
-
-    if (loginButton) {
-        loginButton.addEventListener("click", () => {
-            loginButton.style.display = "none";
-            loadingText.style.display = "block";
-        });
-    }
-});
