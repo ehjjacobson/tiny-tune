@@ -1,6 +1,6 @@
 let currentProgressMs = 0;
 let intervalId;
-let lastFetchTime = 0;
+let songEnded = false;
 
 async function fetchNowPlaying() {
     try {
@@ -8,6 +8,7 @@ async function fetchNowPlaying() {
         const data = await response.json();
 
         if (data && data.item) {
+            // Update UI with the new song details
             document.getElementById('album-cover').src = data.item.album.images[0].url;
             document.getElementById('track-title').textContent = data.item.name;
             document.getElementById('artist-name').textContent = data.item.artists[0].name;
@@ -15,9 +16,7 @@ async function fetchNowPlaying() {
 
             currentProgressMs = data.progress_ms;
             const duration = data.item.duration_ms;
-            lastFetchTime = data.timestamp;
 
-            adjustProgressForDelay();
             updateProgress(currentProgressMs, duration);
 
             if (intervalId) clearInterval(intervalId);
@@ -27,7 +26,8 @@ async function fetchNowPlaying() {
                     updateProgress(currentProgressMs, duration);
                 } else {
                     clearInterval(intervalId);
-                    fetchNowPlaying(); // Fetch new song data
+                    songEnded = true;
+                    checkForNewSong();
                 }
             }, 1000);
         } else {
@@ -39,12 +39,6 @@ async function fetchNowPlaying() {
     }
 }
 
-function adjustProgressForDelay() {
-    const currentTime = Date.now();
-    const delay = currentTime - lastFetchTime;
-    currentProgressMs += delay;
-}
-
 function updateProgress(progressMs, durationMs) {
     const progress = Math.floor(progressMs / 1000);
     const duration = Math.floor(durationMs / 1000);
@@ -54,6 +48,17 @@ function updateProgress(progressMs, durationMs) {
 
     const progressPercentage = (progressMs / durationMs) * 100;
     document.getElementById('progress-bar').style.width = `${progressPercentage}%`;
+}
+
+async function checkForNewSong() {
+    if (songEnded) {
+        try {
+            await fetchNowPlaying(); // Fetch new song data
+            songEnded = false;
+        } catch (error) {
+            console.error('Error checking for new song:', error);
+        }
+    }
 }
 
 fetchNowPlaying();
