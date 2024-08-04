@@ -1,5 +1,9 @@
 async function fetchNowPlaying() {
     try {
+        // Show the skeleton loader
+        document.getElementById('loading-skeleton').style.display = 'flex';
+        document.getElementById('now-playing').style.display = 'none';
+
         const response = await fetch('/now-playing');
         const data = await response.json();
 
@@ -17,7 +21,7 @@ async function fetchNowPlaying() {
 
             document.getElementById('progress-bar').style.width = `${(data.progress_ms / data.item.duration_ms) * 100}%`;
 
-            // Hide the skeleton loader and show the player
+            // Hide skeleton loading and show the widget
             document.getElementById('loading-skeleton').style.display = 'none';
             document.getElementById('now-playing').style.display = 'block';
 
@@ -33,15 +37,12 @@ async function fetchNowPlaying() {
                 }
             }, 1000);
         } else {
-            // Hide the skeleton loader if there's no data
-            document.getElementById('loading-skeleton').style.display = 'none';
             document.getElementById('now-playing').style.display = 'none';
         }
     } catch (error) {
         console.error('Error fetching now-playing data:', error);
-        // Hide the skeleton loader if an error occurs
-        document.getElementById('loading-skeleton').style.display = 'none';
         document.getElementById('now-playing').style.display = 'none';
+        document.getElementById('loading-skeleton').style.display = 'none'; // Hide the skeleton loader if there's an error
     }
 }
 
