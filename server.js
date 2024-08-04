@@ -19,7 +19,7 @@ let tokensCollection;
 // Initialize token variables
 let access_token = '';
 let refresh_token = '';
-let expires_in = 3600;
+let expires_in = 1800;
 let token_received_time = 0;
 
 const connectToDB = async () => {
@@ -60,7 +60,7 @@ const refreshAccessToken = async () => {
 
         if (response.data.access_token) {
             access_token = response.data.access_token;
-            expires_in = response.data.expires_in || 3600;
+            expires_in = response.data.expires_in || 1800;
             token_received_time = Math.floor(Date.now() / 1000);
             console.log('Access token refreshed:', access_token);
 
