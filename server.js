@@ -14,26 +14,14 @@ const redirect_uri = process.env.REDIRECT_URI;
 // MongoDB setup
 const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri);
-let tokensCollection;
-
-// Initialize token variables
-let access_token = '';
-let refresh_token = '';
-let expires_in = 1800;
-let token_received_time = 0;
+let usersCollection;
 
 const connectToDB = async () => {
     try {
         await client.connect();
         const database = client.db('tinyTuneDB');
-        tokensCollection = database.collection('tokens');
+        usersCollection = database.collection('users');
         console.log("Connected to MongoDB");
-
-        // Retrieve stored tokens from the database if available
-        const storedTokens = await tokensCollection.findOne({});
-        if (storedTokens) {
-            ({ access_token, refresh_token, token_received_time, expires_in } = storedTokens);
-        }
     } catch (err) {
         console.error("Error connecting to MongoDB:", err);
     }
@@ -42,16 +30,16 @@ const connectToDB = async () => {
 connectToDB();
 
 // Function to check if the token is expired
-const isTokenExpired = () => Date.now() / 1000 >= (token_received_time + expires_in);
+const isTokenExpired = (user) => Date.now() / 1000 >= (user.token_received_time + user.expires_in);
 
 // Function to refresh the access token
-const refreshAccessToken = async () => {
+const refreshAccessToken = async (user) => {
     try {
-        if (!refresh_token) throw new Error('No refresh token available');
+        if (!user.refresh_token) throw new Error('No refresh token available');
 
         const response = await axios.post('https://accounts.spotify.com/api/token', querystring.stringify({
             grant_type: 'refresh_token',
-            refresh_token,
+            refresh_token: user.refresh_token,
             client_id,
             client_secret
         }), {
@@ -59,25 +47,16 @@ const refreshAccessToken = async () => {
         });
 
         if (response.data.access_token) {
-            access_token = response.data.access_token;
-            expires_in = response.data.expires_in || 1800; // Default to 1800 seconds if not provided
-            token_received_time = Math.floor(Date.now() / 1000);
-            const refresh_token_last_used = token_received_time;
+            user.access_token = response.data.access_token;
+            user.expires_in = response.data.expires_in || 1800; // Default to 1800 seconds if not provided
+            user.token_received_time = Math.floor(Date.now() / 1000);
+            user.refresh_token_last_used = user.token_received_time;
 
-            console.log('Access token refreshed:', access_token);
+            console.log('Access token refreshed:', user.access_token);
 
-            await tokensCollection.updateOne(
-                {},
-                {
-                    $set: {
-                        access_token,
-                        refresh_token,
-                        token_received_time,
-                        expires_in,
-                        refresh_token_last_used
-                    }
-                },
-                { upsert: true }
+            await usersCollection.updateOne(
+                { spotifyId: user.spotifyId },
+                { $set: user }
             );
         } else {
             console.error('Failed to refresh access token:', response.data);
@@ -90,7 +69,13 @@ const refreshAccessToken = async () => {
 // Middleware to ensure the access token is valid
 const ensureAccessToken = async (req, res, next) => {
     try {
-        if (isTokenExpired()) await refreshAccessToken();
+        const user = await usersCollection.findOne({ spotifyId: req.query.user });
+        if (!user) {
+            return res.status(401).send('User not found');
+        }
+
+        if (isTokenExpired(user)) await refreshAccessToken(user);
+        req.user = user;
         next();
     } catch (error) {
         console.error('Error ensuring access token:', error.message);
@@ -103,7 +88,6 @@ app.use(express.static('public'));
 
 // Serve the main page
 app.get('/', (req, res) => {
-    const isAuthenticated = access_token && !isTokenExpired();
     res.send(`
         <!DOCTYPE html>
         <html lang="en">
@@ -123,15 +107,8 @@ app.get('/', (req, res) => {
         <body>
             <h1>Welcome to Tiny Tune</h1>
             <div class="loading" id="loading">Processing authentication...</div>
-            ${isAuthenticated ? `
-                <p>You are logged in with Spotify.</p>
-                <p>Enjoy exploring your music and see what you're currently playing!</p>
-                <a href="/logout" class="btn">Logout</a>
-            ` : `
-                <p>See what you're currently playing on Spotify!</p>
-                <a href="/login" class="btn" id="login-button">Login with Spotify</a>
-            `}
-            <script src="/public/script.js"></script>
+            <p>See what you're currently playing on Spotify!</p>
+            <a href="/login" class="btn" id="login-button">Login with Spotify</a>
         </body>
         </html>
     `);
@@ -139,7 +116,7 @@ app.get('/', (req, res) => {
 
 // Endpoint to initiate login
 app.get('/login', (req, res) => {
-    const scopes = 'user-read-playback-state user-read-currently-playing';
+    const scopes = 'user-read-playback-state user-read-currently-playing user-read-email user-read-private';
     res.redirect('https://accounts.spotify.com/authorize?' +
         querystring.stringify({
             response_type: 'code',
@@ -164,16 +141,37 @@ app.get('/callback', async (req, res) => {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
 
-        console.log("Spotify token response:", response.data);
+        const access_token = response.data.access_token;
+        const refresh_token = response.data.refresh_token;
+        const expires_in = response.data.expires_in;
+        const token_received_time = Math.floor(Date.now() / 1000);
 
-        access_token = response.data.access_token;
-        refresh_token = response.data.refresh_token;
-        expires_in = response.data.expires_in;
-        token_received_time = Math.floor(Date.now() / 1000);
+        // Fetch the user's Spotify profile
+        const profileResponse = await axios.get('https://api.spotify.com/v1/me', {
+            headers: {
+                'Authorization': `Bearer ${access_token}`
+            }
+        });
 
-        await tokensCollection.updateOne({}, { $set: { access_token, refresh_token, token_received_time, expires_in } }, { upsert: true });
+        const userProfile = profileResponse.data;
+        const user = {
+            spotifyId: userProfile.id,
+            displayName: userProfile.display_name,
+            email: userProfile.email,
+            access_token,
+            refresh_token,
+            token_received_time,
+            expires_in
+        };
 
-        res.redirect('/');
+        // Save user profile data and tokens in MongoDB
+        await usersCollection.updateOne(
+            { spotifyId: userProfile.id },
+            { $set: user },
+            { upsert: true }
+        );
+
+        res.redirect(`/widget?user=${userProfile.id}`);
     } catch (error) {
         console.error('Error during authentication:', error.response ? error.response.data : error.message);
         res.status(500).send('Error during authentication');
@@ -181,10 +179,10 @@ app.get('/callback', async (req, res) => {
 });
 
 // Endpoint to refresh the access token
-app.get('/refresh_token', async (req, res) => {
+app.get('/refresh_token', ensureAccessToken, async (req, res) => {
     try {
-        await refreshAccessToken();
-        res.json({ access_token });
+        await refreshAccessToken(req.user);
+        res.json({ access_token: req.user.access_token });
     } catch (error) {
         res.status(500).send('Error refreshing access token');
     }
@@ -194,7 +192,7 @@ app.get('/refresh_token', async (req, res) => {
 app.get('/now-playing', ensureAccessToken, async (req, res) => {
     try {
         const response = await axios.get('https://api.spotify.com/v1/me/player/currently-playing', {
-            headers: { 'Authorization': `Bearer ${access_token}` }
+            headers: { 'Authorization': `Bearer ${req.user.access_token}` }
         });
         res.json(response.data);
     } catch (error) {
@@ -211,14 +209,15 @@ app.get('/widget', (req, res) => {
 // Logout endpoint
 app.get('/logout', async (req, res) => {
     try {
-        // Clear the tokens from memory
-        access_token = '';
-        refresh_token = '';
-        token_received_time = 0;
-        expires_in = 0;
+        const userId = req.query.user;
+        if (!userId) {
+            return res.status(400).send('User ID is required');
+        }
 
-        // Clear the tokens from the database
-        await tokensCollection.updateOne({}, { $set: { access_token: '', refresh_token: '', token_received_time: 0, expires_in: 0 } });
+        // Clear the tokens for the specific user
+        await usersCollection.updateOne({ spotifyId: userId }, {
+            $unset: { access_token: '', refresh_token: '', token_received_time: '', expires_in: '' }
+        });
 
         res.redirect('/');
     } catch (error) {
@@ -228,8 +227,9 @@ app.get('/logout', async (req, res) => {
 });
 
 // Start the server
-app.listen(3000, () => {
-    console.log('Server is running on port 3000');
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
 });
 
 module.exports = app;

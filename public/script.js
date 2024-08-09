@@ -4,36 +4,35 @@ let songEnded = false;
 
 async function fetchNowPlaying() {
     try {
-        const response = await fetch('/now-playing');
+        const urlParams = new URLSearchParams(window.location.search);
+        const userId = urlParams.get('user');
+        const response = await fetch(`/now-playing?user=${userId}`);
         const data = await response.json();
 
-        if (data && data.item) {
-            // Check if the song is playing
-            if (data.is_playing) {
-                // Update UI with the new song details
-                document.getElementById('album-cover').src = data.item.album.images[0].url;
-                document.getElementById('track-title').textContent = data.item.name;
-                document.getElementById('artist-name').textContent = data.item.artists[0].name;
-                document.getElementById('spotify-link').href = data.item.external_urls.spotify;
+        if (data && data.item && data.is_playing) {
+            // Update UI with the new song details
+            document.getElementById('album-cover').src = data.item.album.images[0].url;
+            document.getElementById('track-title').textContent = data.item.name;
+            document.getElementById('artist-name').textContent = data.item.artists[0].name;
+            document.getElementById('spotify-link').href = data.item.external_urls.spotify;
 
-                currentProgressMs = data.progress_ms;
-                const duration = data.item.duration_ms;
+            currentProgressMs = data.progress_ms;
+            const duration = data.item.duration_ms;
 
-                updateProgress(currentProgressMs, duration);
+            updateProgress(currentProgressMs, duration);
 
-                // Clear any existing interval and start a new one
-                if (intervalId) clearInterval(intervalId);
-                intervalId = setInterval(() => {
-                    currentProgressMs += 1000;
-                    if (currentProgressMs <= duration) {
-                        updateProgress(currentProgressMs, duration);
-                    } else {
-                        clearInterval(intervalId);
-                        songEnded = true;
-                        checkForNewSong();
-                    }
-                }, 1000);
-            } 
+            // Clear any existing interval and start a new one
+            if (intervalId) clearInterval(intervalId);
+            intervalId = setInterval(() => {
+                currentProgressMs += 1000;
+                if (currentProgressMs <= duration) {
+                    updateProgress(currentProgressMs, duration);
+                } else {
+                    clearInterval(intervalId);
+                    songEnded = true;
+                    checkForNewSong();
+                }
+            }, 1000);
         } else {
             document.getElementById('now-playing').style.display = 'none';
         }
