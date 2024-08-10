@@ -7,6 +7,12 @@ async function fetchNowPlaying() {
         const urlParams = new URLSearchParams(window.location.search);
         const userId = urlParams.get('user');
         const response = await fetch(`/now-playing?user=${userId}`);
+
+        // Check if the response is OK (status code 200-299)
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
         const data = await response.json();
 
         if (data && data.item && data.is_playing) {
@@ -34,7 +40,10 @@ async function fetchNowPlaying() {
                 }
             }, 1000);
         } else {
+            // Handle the case when no song is playing
+            console.warn('No song is currently playing.');
             document.getElementById('now-playing').style.display = 'none';
+            clearInterval(intervalId); // Stop the interval if no song is playing
         }
     } catch (error) {
         console.error('Error fetching now-playing data:', error);
@@ -64,4 +73,5 @@ async function checkForNewSong() {
     }
 }
 
+// Initial fetch when the script is loaded
 fetchNowPlaying();
