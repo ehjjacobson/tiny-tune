@@ -18,6 +18,7 @@ async function fetchNowPlaying() {
         if (data && data.item && data.is_playing) {
             // Update UI with the new song details
             document.getElementById('album-cover').src = data.item.album.images[0].url;
+            document.querySelector('.album-cover').style.backgroundImage = `url(${data.item.album.images[0].url})`; // Set the album cover as the background image
             document.getElementById('track-title').textContent = data.item.name;
             document.getElementById('artist-name').textContent = data.item.artists[0].name;
             document.getElementById('spotify-link').href = data.item.external_urls.spotify;

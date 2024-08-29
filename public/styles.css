@@ -25,11 +25,24 @@ body {
     color: inherit;
 }
 
-.album-cover {
-    width: 100px;
-    height: 100px;
-    border-radius: 10px;
+.lp-record {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    animation: spin 5s linear infinite;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     margin-right: 20px;
+}
+
+.album-cover {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background-size: cover; /* Ensures the entire cover is displayed */
+    background-position: center; /* Centers the cover */
+    background-repeat: no-repeat; /* Prevents any tiling of the image */
 }
 
 .track-info {
@@ -115,5 +128,14 @@ body {
     100% {
         transform: scale(1);
         opacity: 1;
+    }
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
     }
 }
