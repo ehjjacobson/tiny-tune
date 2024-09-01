@@ -24,9 +24,10 @@ const connectToDB = async () => {
         console.log("Connected to MongoDB");
     } catch (err) {
         console.error("Error connecting to MongoDB:", err);
-        process.exit(1); // Exit the application if connection fails
     }
 };
+
+connectToDB();
 
 // Function to check if the token is expired
 const isTokenExpired = (user) => Date.now() / 1000 >= (user.token_received_time + user.expires_in);
