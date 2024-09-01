@@ -16,17 +16,17 @@ const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri);
 let usersCollection;
 
-const connectToDB = async () => {
-    try {
-        await client.connect();
-        const database = client.db('tinyTuneDB');
-        usersCollection = database.collection('users');
-        console.log("Connected to MongoDB");
-    } catch (err) {
-        console.error("Error connecting to MongoDB:", err);
-        process.exit(1); // Exit the application if connection fails
-    }
-};
+// const connectToDB = async () => {
+//     try {
+//         await client.connect();
+//         const database = client.db('tinyTuneDB');
+//         usersCollection = database.collection('users');
+//         console.log("Connected to MongoDB");
+//     } catch (err) {
+//         console.error("Error connecting to MongoDB:", err);
+//         process.exit(1); // Exit the application if connection fails
+//     }
+// };
 
 // Start the server after ensuring DB connection
 const startServer = async () => {

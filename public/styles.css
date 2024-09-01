@@ -38,8 +38,8 @@ body {
 }
 
 .album-cover {
-    width: 80px;
-    height: 80px;
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
     background-size: cover; /* Ensures the entire cover is displayed */
     background-position: center; /* Centers the cover */
