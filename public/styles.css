@@ -26,8 +26,9 @@ body {
 }
 
 .lp-record {
-    width: 120px;
-    height: 120px;
+    background: black;
+    width: 140px;
+    height: 109px;
     border-radius: 50%;
     animation: spin 5s linear infinite;
     display: flex;
