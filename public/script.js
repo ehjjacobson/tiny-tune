@@ -4,8 +4,16 @@ let songEnded = false;
 
 async function fetchNowPlaying() {
     try {
+        showLoadingSpinner(); // Added loading indicator
+
         const urlParams = new URLSearchParams(window.location.search);
         const userId = urlParams.get('user');
+
+        // Ensure userId is available before proceeding
+        if (!userId) {
+            throw new Error('User ID not found in query parameters');
+        }
+
         const response = await fetch(`/now-playing?user=${userId}`);
 
         // Check if the response is OK (status code 200-299)
@@ -17,11 +25,7 @@ async function fetchNowPlaying() {
 
         if (data && data.item && data.is_playing) {
             // Update UI with the new song details
-            document.getElementById('album-cover').src = data.item.album.images[0].url;
-            document.querySelector('.album-cover').style.backgroundImage = `url(${data.item.album.images[0].url})`; // Set the album cover as the background image
-            document.getElementById('track-title').textContent = data.item.name;
-            document.getElementById('artist-name').textContent = data.item.artists[0].name;
-            document.getElementById('spotify-link').href = data.item.external_urls.spotify;
+            updateUIWithTrackData(data);
 
             currentProgressMs = data.progress_ms;
             const duration = data.item.duration_ms;
@@ -41,15 +45,23 @@ async function fetchNowPlaying() {
                 }
             }, 1000);
         } else {
-            // Handle the case when no song is playing
             console.warn('No song is currently playing.');
-            document.getElementById('now-playing').style.display = 'none';
-            clearInterval(intervalId); // Stop the interval if no song is playing
+            clearUI();
         }
     } catch (error) {
         console.error('Error fetching now-playing data:', error);
-        document.getElementById('now-playing').style.display = 'none';
+        clearUI();
+    } finally {
+        hideLoadingSpinner(); // Ensure spinner is hidden when done
     }
+}
+
+function updateUIWithTrackData(data) {
+    document.getElementById('album-cover').src = data.item.album.images[0].url;
+    document.querySelector('.album-cover').style.backgroundImage = `url(${data.item.album.images[0].url})`;
+    document.getElementById('track-title').textContent = data.item.name;
+    document.getElementById('artist-name').textContent = data.item.artists[0].name;
+    document.getElementById('spotify-link').href = data.item.external_urls.spotify;
 }
 
 function updateProgress(progressMs, durationMs) {
@@ -72,6 +84,14 @@ async function checkForNewSong() {
             console.error('Error checking for new song:', error);
         }
     }
+}
+
+function showLoadingSpinner() {
+    document.getElementById('loading').style.display = 'block';
+}
+
+function hideLoadingSpinner() {
+    document.getElementById('loading').style.display = 'none';
 }
 
 // Initial fetch when the script is loaded
