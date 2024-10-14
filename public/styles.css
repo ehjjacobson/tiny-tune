@@ -28,13 +28,15 @@ body {
 .lp-record {
     background: black;
     width: 140px;
-    height: 109px;
+    height: 140px; /* Set height to the same as width */
     border-radius: 50%;
     animation: spin 5s linear infinite;
     display: flex;
     align-items: center;
     justify-content: center;
     margin-right: 20px;
+    max-width: 100%; /* Ensures responsiveness */
+    max-height: 100%;
 }
 
 .album-cover {
