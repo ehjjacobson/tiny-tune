@@ -29,6 +29,7 @@ body {
     background: black;
     width: 140px;
     height: 140px; /* Set height to the same as width */
+    aspect-ratio: 1 / 1; /* Ensures it's a perfect square */
     border-radius: 50%;
     animation: spin 5s linear infinite;
     display: flex;
