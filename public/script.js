@@ -52,18 +52,20 @@ async function fetchNowPlaying() {
                 }
             }, 1000);
         } else {
-            // If no song is playing, display the last played song with a timestamp
+            // If no song is playing, display the last played song with a timestamp in the progress bar area
             if (lastPlayedSong) {
                 const formattedTime = lastPlayedSong.lastPlayedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                document.getElementById('track-title').textContent = `${lastPlayedSong.title} (Last played at ${formattedTime})`;
+                document.getElementById('track-title').textContent = lastPlayedSong.title;
                 document.getElementById('artist-name').textContent = lastPlayedSong.artist;
                 document.getElementById('album-cover').src = lastPlayedSong.albumCover;
                 document.querySelector('.album-cover').style.backgroundImage = `url(${lastPlayedSong.albumCover})`;
 
-                // Hide the progress bar when no song is playing
-                document.getElementById('progress-bar').style.display = 'none';
-                document.getElementById('progress-time').textContent = '';
+                // Show the last played time where the progress bar used to be
+                document.getElementById('progress-time').textContent = `Last played at ${formattedTime}`;
                 document.getElementById('track-duration').textContent = '';
+
+                // Hide the actual progress bar
+                document.getElementById('progress-bar').style.display = 'none';
             } else {
                 // Default message if no song was played before
                 document.getElementById('track-title').textContent = 'No song is currently playing';
