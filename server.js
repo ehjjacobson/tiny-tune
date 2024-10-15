@@ -16,16 +16,24 @@ const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri);
 let usersCollection;
 
-// Improved MongoDB connection handling
-const connectToDB = async () => {
-    try {
-        await client.connect();  // Establish MongoDB connection
-        const database = client.db('tinyTuneDB');
-        usersCollection = database.collection('users');
-        console.log("Connected to MongoDB");
-    } catch (err) {
-        console.error("Error connecting to MongoDB:", err);
-        // Log the error but don't block the server from starting
+// Improved MongoDB connection handling with retry logic
+const connectToDB = async (retries = 5, delay = 3000) => {
+    while (retries) {
+        try {
+            await client.connect();  // Establish MongoDB connection
+            const database = client.db('tinyTuneDB');
+            usersCollection = database.collection('users');
+            console.log("Connected to MongoDB");
+            break;  // Exit loop on success
+        } catch (err) {
+            console.error("Error connecting to MongoDB, retries left:", retries - 1, err);
+            retries -= 1;
+            if (retries === 0) {
+                console.error("Exhausted retries, could not connect to MongoDB");
+                return;  // Exit the function after failing
+            }
+            await new Promise(res => setTimeout(res, delay));  // Wait before retrying
+        }
     }
 };
 
@@ -195,7 +203,17 @@ app.get('/now-playing', ensureAccessToken, async (req, res) => {
         const response = await axios.get('https://api.spotify.com/v1/me/player/currently-playing', {
             headers: { 'Authorization': `Bearer ${req.user.access_token}` }
         });
-        res.json(response.data);
+
+        if (response.data && response.data.is_playing) {
+            res.json(response.data);
+        } else {
+            // If no song is playing, respond with last played information
+            const lastPlayed = {
+                message: 'No track currently playing',
+                last_played_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            res.json(lastPlayed);
+        }
     } catch (error) {
         console.error('Error fetching now-playing data:', error.message);
         res.status(500).send('Error fetching now-playing data');
