@@ -27,6 +27,10 @@ async function fetchNowPlaying() {
             currentProgressMs = data.progress_ms;
             const duration = data.item.duration_ms;
 
+            // Show the progress bar and hide the last played text
+            document.querySelector('.progress-bar-container').style.display = 'flex';
+            document.getElementById('last-played').style.display = 'none';
+
             updateProgress(currentProgressMs, duration);
 
             // Reset and start interval for progress updates
@@ -47,6 +51,10 @@ async function fetchNowPlaying() {
             if (lastPlayedTime) {
                 const formattedTime = lastPlayedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 document.getElementById('track-title').textContent += ` (Last played at ${formattedTime})`;
+                
+                // Hide the progress bar and show the last played time
+                document.querySelector('.progress-bar-container').style.display = 'none';
+                document.getElementById('last-played').style.display = 'block';
             }
             console.warn('No song is currently playing.');
             clearInterval(intervalId); // Stop the interval if no song is playing
@@ -54,28 +62,6 @@ async function fetchNowPlaying() {
     } catch (error) {
         console.error('Error fetching now-playing data:', error);
         document.getElementById('now-playing').style.display = 'none';  // In case of an error, still hide the widget
-    }
-}
-
-function updateProgress(progressMs, durationMs) {
-    const progress = Math.floor(progressMs / 1000);
-    const duration = Math.floor(durationMs / 1000);
-
-    document.getElementById('progress-time').textContent = `${Math.floor(progress / 60)}:${progress % 60 < 10 ? '0' : ''}${progress % 60}`;
-    document.getElementById('track-duration').textContent = `${Math.floor(duration / 60)}:${duration % 60 < 10 ? '0' : ''}${duration % 60}`;
-
-    const progressPercentage = (progressMs / durationMs) * 100;
-    document.getElementById('progress-bar').style.width = `${progressPercentage}%`;
-}
-
-async function checkForNewSong() {
-    if (songEnded) {
-        try {
-            await fetchNowPlaying(); // Fetch new song data
-            songEnded = false;
-        } catch (error) {
-            console.error('Error checking for new song:', error);
-        }
     }
 }
 

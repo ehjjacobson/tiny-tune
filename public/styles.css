@@ -118,6 +118,13 @@ body {
     color: #666;
 }
 
+#last-played {
+    font-size: 0.85em;
+    color: #999;
+    text-align: center;
+    margin-top: 10px;
+}
+
 @keyframes pulse {
     0% {
         transform: scale(1);
