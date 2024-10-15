@@ -32,12 +32,35 @@ const connectToDB = async () => {
 // Start the MongoDB connection but don't block serving static files
 connectToDB();  // Call MongoDB connection in the background
 
-// Serve static files from the 'public' directory
+// Serve static files from the 'public' directory (e.g. CSS, JS, etc.)
 app.use(express.static('public'));
 
-// Serve the login page (home page)
+// Serve the login page (embedded in server.js)
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Welcome to Tiny Tune</title>
+            <style>
+                body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background-color: #f4f4f4; }
+                h1 { color: #333; }
+                p { font-size: 18px; color: #666; }
+                .btn { display: inline-block; margin-top: 20px; padding: 10px 20px; font-size: 16px; background-color: #1db954; color: white; text-decoration: none; border-radius: 5px; }
+                .btn:hover { background-color: #1aa34a; }
+                .loading { display: none; font-size: 18px; color: #666; }
+            </style>
+        </head>
+        <body>
+            <h1>Welcome to Tiny Tune</h1>
+            <div class="loading" id="loading">Processing authentication...</div>
+            <p>See what you're currently playing on Spotify!</p>
+            <a href="/login" class="btn" id="login-button">Login with Spotify</a>
+        </body>
+        </html>
+    `);
 });
 
 // Endpoint to initiate login
