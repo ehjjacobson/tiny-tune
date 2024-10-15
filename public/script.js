@@ -9,6 +9,7 @@ async function fetchNowPlaying() {
         const userId = urlParams.get('user');
         const response = await fetch(`/now-playing?user=${userId}`);
 
+        // Check if the response is OK (status code 200-299)
         if (!response.ok) {
             throw new Error(`HTTP error! Status: ${response.status}`);
         }
@@ -45,11 +46,11 @@ async function fetchNowPlaying() {
             // Handle when no song is currently playing
             if (lastPlayedTime) {
                 const formattedTime = lastPlayedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                document.getElementById('track-title').textContent += ` (Last played at ${formattedTime})`;
-                // Hide the progress bar and related elements
-                document.getElementById('progress-bar').style.display = 'none';
-                document.getElementById('progress-time').style.display = 'none';
-                document.getElementById('track-duration').style.display = 'none';
+                document.getElementById('track-title').textContent = `Track Title (Last played at ${formattedTime})`;
+                document.getElementById('artist-name').textContent = 'Artist Name';
+                document.getElementById('progress-bar').style.width = `0%`;
+            } else {
+                document.getElementById('track-title').textContent = 'No song is currently playing';
             }
             console.warn('No song is currently playing.');
             clearInterval(intervalId); // Stop the interval if no song is playing
@@ -59,6 +60,7 @@ async function fetchNowPlaying() {
         document.getElementById('now-playing').style.display = 'none';  // In case of an error, still hide the widget
     }
 }
+
 
 function updateProgress(progressMs, durationMs) {
     const progress = Math.floor(progressMs / 1000);
