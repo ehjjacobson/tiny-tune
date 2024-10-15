@@ -28,13 +28,13 @@ async function fetchNowPlaying() {
             currentProgressMs = data.progress_ms;
             const duration = data.item.duration_ms;
 
-            // Store the last played song details
+            // Store last played song details
             lastPlayedSong = {
-                name: data.item.name,
+                title: data.item.name,
                 artist: data.item.artists[0].name,
-                albumCover: data.item.album.images[0].url
+                albumCover: data.item.album.images[0].url,
+                lastPlayedTime: new Date()
             };
-            lastPlayedTime = new Date(); // Store the time when the last song was fetched
 
             updateProgress(currentProgressMs, duration);
 
@@ -47,30 +47,37 @@ async function fetchNowPlaying() {
                 } else {
                     clearInterval(intervalId);
                     songEnded = true;
+                    lastPlayedSong.lastPlayedTime = new Date();  // Update the last played timestamp
                     checkForNewSong();
                 }
             }, 1000);
         } else {
-            // Show the last played song and the time it was last fetched
-            if (lastPlayedSong && lastPlayedTime) {
-                const formattedTime = lastPlayedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                document.getElementById('track-title').textContent = `${lastPlayedSong.name}`;
-                document.getElementById('artist-name').textContent = `${lastPlayedSong.artist}`;
+            // If no song is playing, display the last played song with a timestamp
+            if (lastPlayedSong) {
+                const formattedTime = lastPlayedSong.lastPlayedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                document.getElementById('track-title').textContent = `${lastPlayedSong.title} (Last played at ${formattedTime})`;
+                document.getElementById('artist-name').textContent = lastPlayedSong.artist;
                 document.getElementById('album-cover').src = lastPlayedSong.albumCover;
-                document.getElementById('progress-bar').style.display = 'none'; // Hide the progress bar
-                document.getElementById('progress-time').style.display = 'none'; // Hide progress time
-                document.getElementById('track-duration').textContent = `Last played: ${formattedTime}`;
+                document.querySelector('.album-cover').style.backgroundImage = `url(${lastPlayedSong.albumCover})`;
+
+                // Hide the progress bar when no song is playing
+                document.getElementById('progress-bar').style.display = 'none';
+                document.getElementById('progress-time').textContent = '';
+                document.getElementById('track-duration').textContent = '';
             } else {
+                // Default message if no song was played before
                 document.getElementById('track-title').textContent = 'No song is currently playing';
                 document.getElementById('artist-name').textContent = '';
-                document.getElementById('progress-bar').style.display = 'none'; // Hide the progress bar
-                document.getElementById('progress-time').style.display = 'none'; // Hide progress time
-                document.getElementById('track-duration').textContent = '';
+                document.getElementById('album-cover').src = '';
+                document.querySelector('.album-cover').style.backgroundImage = '';
+                document.getElementById('progress-bar').style.display = 'none';
             }
+            console.warn('No song is currently playing.');
+            clearInterval(intervalId); // Stop the interval if no song is playing
         }
     } catch (error) {
         console.error('Error fetching now-playing data:', error);
-        document.getElementById('now-playing').style.display = 'none';  // In case of an error, still hide the widget
+        document.getElementById('now-playing').style.display = 'none';  // In case of an error, hide the widget
     }
 }
 
