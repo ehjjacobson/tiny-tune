@@ -1,6 +1,7 @@
 let currentProgressMs = 0;
 let intervalId;
 let songEnded = false;
+let lastPlayedTime = null;
 
 async function fetchNowPlaying() {
     try {
@@ -28,7 +29,7 @@ async function fetchNowPlaying() {
 
             updateProgress(currentProgressMs, duration);
 
-            // Clear any existing interval and start a new one
+            // Reset and start interval for progress updates
             if (intervalId) clearInterval(intervalId);
             intervalId = setInterval(() => {
                 currentProgressMs += 1000;
@@ -37,18 +38,22 @@ async function fetchNowPlaying() {
                 } else {
                     clearInterval(intervalId);
                     songEnded = true;
+                    lastPlayedTime = new Date();  // Store the last played timestamp
                     checkForNewSong();
                 }
             }, 1000);
         } else {
-            // Handle the case when no song is playing
+            // Handle when no song is currently playing
+            if (lastPlayedTime) {
+                const formattedTime = lastPlayedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                document.getElementById('track-title').textContent += ` (Last played at ${formattedTime})`;
+            }
             console.warn('No song is currently playing.');
-            document.getElementById('now-playing').style.display = 'none';
             clearInterval(intervalId); // Stop the interval if no song is playing
         }
     } catch (error) {
         console.error('Error fetching now-playing data:', error);
-        document.getElementById('now-playing').style.display = 'none';
+        document.getElementById('now-playing').style.display = 'none';  // In case of an error, still hide the widget
     }
 }
 
