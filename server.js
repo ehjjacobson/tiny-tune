@@ -15,6 +15,7 @@ const redirect_uri = process.env.REDIRECT_URI;
 const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri);
 let usersCollection;
+let dbReadyPromise = null;
 
 // Improved MongoDB connection handling with retry logic
 const connectToDB = async (retries = 5, delay = 3000) => {
@@ -24,21 +25,32 @@ const connectToDB = async (retries = 5, delay = 3000) => {
             const database = client.db('tinyTuneDB');
             usersCollection = database.collection('users');
             console.log("Connected to MongoDB");
-            break;  // Exit loop on success
+            return usersCollection;  // Exit loop on success
         } catch (err) {
             console.error("Error connecting to MongoDB, retries left:", retries - 1, err);
             retries -= 1;
             if (retries === 0) {
                 console.error("Exhausted retries, could not connect to MongoDB");
-                return;  // Exit the function after failing
+                throw err;  // Surface the failure so callers can react
             }
             await new Promise(res => setTimeout(res, delay));  // Wait before retrying
         }
     }
 };
 
+const ensureUsersCollection = async () => {
+    if (usersCollection) return usersCollection;
+    if (!dbReadyPromise) {
+        dbReadyPromise = connectToDB().catch(err => {
+            dbReadyPromise = null;  // Allow retries on next call
+            throw err;
+        });
+    }
+    return dbReadyPromise;
+};
+
 // Start the MongoDB connection but don't block serving static files
-connectToDB();  // Call MongoDB connection in the background
+ensureUsersCollection();  // Call MongoDB connection in the background
 
 // Serve static files from the 'public' directory (e.g. CSS, JS, etc.)
 app.use(express.static('public'));
@@ -122,7 +134,8 @@ app.get('/callback', async (req, res) => {
         };
 
         // Save user profile data and tokens in MongoDB
-        await usersCollection.updateOne(
+        const collection = await ensureUsersCollection();
+        await collection.updateOne(
             { spotifyId: userProfile.id },
             { $set: user },
             { upsert: true }
@@ -138,7 +151,8 @@ app.get('/callback', async (req, res) => {
 // Middleware to ensure the access token is valid
 const ensureAccessToken = async (req, res, next) => {
     try {
-        const user = await usersCollection.findOne({ spotifyId: req.query.user });
+        const collection = await ensureUsersCollection();
+        const user = await collection.findOne({ spotifyId: req.query.user });
         if (!user) {
             return res.status(401).send('User not found');
         }
@@ -175,7 +189,8 @@ const refreshAccessToken = async (user) => {
 
             console.log('Access token refreshed:', user.access_token);
 
-            await usersCollection.updateOne(
+            const collection = await ensureUsersCollection();
+            await collection.updateOne(
                 { spotifyId: user.spotifyId },
                 { $set: user }
             );
@@ -234,7 +249,8 @@ app.get('/logout', async (req, res) => {
         }
 
         // Clear the tokens for the specific user
-        await usersCollection.updateOne({ spotifyId: userId }, {
+        const collection = await ensureUsersCollection();
+        await collection.updateOne({ spotifyId: userId }, {
             $unset: { access_token: '', refresh_token: '', token_received_time: '', expires_in: '' }
         });
 
