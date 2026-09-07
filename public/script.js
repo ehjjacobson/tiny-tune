@@ -4,6 +4,12 @@ let songEnded = false;
 let lastPlayedTime = null;
 let lastPlayedSong = null;
 
+function setMinimalText(title, artist) {
+    document.getElementById('minimal-title').textContent = title;
+    document.getElementById('minimal-artist').textContent = artist;
+    document.querySelector('.minimal-sep').style.display = artist ? '' : 'none';
+}
+
 async function fetchNowPlaying() {
     try {
         const urlParams = new URLSearchParams(window.location.search);
@@ -23,6 +29,7 @@ async function fetchNowPlaying() {
             document.querySelector('.album-cover').style.backgroundImage = `url(${data.item.album.images[0].url})`; // Set the album cover as the background image
             document.getElementById('track-title').textContent = data.item.name;
             document.getElementById('artist-name').textContent = data.item.artists[0].name;
+            setMinimalText(data.item.name, data.item.artists[0].name);
             document.getElementById('spotify-link').href = data.item.external_urls.spotify;
 
             currentProgressMs = data.progress_ms;
@@ -57,6 +64,7 @@ async function fetchNowPlaying() {
                 const formattedTime = lastPlayedSong.lastPlayedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 document.getElementById('track-title').textContent = lastPlayedSong.title;
                 document.getElementById('artist-name').textContent = lastPlayedSong.artist;
+                setMinimalText(lastPlayedSong.title, lastPlayedSong.artist);
                 document.getElementById('album-cover').src = lastPlayedSong.albumCover;
                 document.querySelector('.album-cover').style.backgroundImage = `url(${lastPlayedSong.albumCover})`;
 
@@ -70,6 +78,7 @@ async function fetchNowPlaying() {
                 // Default message if no song was played before
                 document.getElementById('track-title').textContent = 'No song is currently playing';
                 document.getElementById('artist-name').textContent = '';
+                setMinimalText('No song is currently playing', '');
                 document.getElementById('album-cover').src = '';
                 document.querySelector('.album-cover').style.backgroundImage = '';
                 document.getElementById('progress-bar').style.display = 'none';
@@ -107,3 +116,19 @@ async function checkForNewSong() {
 
 // Initial fetch when the script is loaded
 fetchNowPlaying();
+
+// Apply customization from URL parameters
+const urlParams = new URLSearchParams(window.location.search);
+const theme = urlParams.get('theme');
+const color = urlParams.get('color');
+const variant = urlParams.get('variant') || 'card';
+
+if (theme === 'light') {
+    document.body.classList.add('light-theme');
+}
+
+if (color) {
+    document.documentElement.style.setProperty('--accent-color', color);
+}
+
+document.body.classList.add(`variant-${variant}`);

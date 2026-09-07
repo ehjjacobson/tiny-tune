@@ -10,6 +10,7 @@ const app = express();
 const client_id = process.env.CLIENT_ID;
 const client_secret = process.env.CLIENT_SECRET;
 const redirect_uri = process.env.REDIRECT_URI;
+// const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // MongoDB setup
 const uri = process.env.MONGODB_URI;
@@ -56,42 +57,22 @@ ensureUsersCollection();  // Call MongoDB connection in the background
 app.use(express.static('public'));
 
 // Serve the login page (embedded in server.js)
+// Serve the landing page
 app.get('/', (req, res) => {
-    res.send(`
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Welcome to Tiny Tune</title>
-            <style>
-                body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background-color: #f4f4f4; }
-                h1 { color: #333; }
-                p { font-size: 18px; color: #666; }
-                .btn { display: inline-block; margin-top: 20px; padding: 10px 20px; font-size: 16px; background-color: #1db954; color: white; text-decoration: none; border-radius: 5px; }
-                .btn:hover { background-color: #1aa34a; }
-                .loading { display: none; font-size: 18px; color: #666; }
-            </style>
-        </head>
-        <body>
-            <h1>Welcome to Tiny Tune</h1>
-            <div class="loading" id="loading">Processing authentication...</div>
-            <p>See what you're currently playing on Spotify!</p>
-            <a href="/login" class="btn" id="login-button">Login with Spotify</a>
-        </body>
-        </html>
-    `);
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Endpoint to initiate login
 app.get('/login', (req, res) => {
     const scopes = 'user-read-playback-state user-read-currently-playing user-read-email user-read-private';
+    const state = req.query.redirect === 'config' ? 'config' : '';
     res.redirect('https://accounts.spotify.com/authorize?' +
         querystring.stringify({
             response_type: 'code',
             client_id,
             scope: scopes,
-            redirect_uri
+            redirect_uri,
+            state
         }));
 });
 
@@ -141,7 +122,10 @@ app.get('/callback', async (req, res) => {
             { upsert: true }
         );
 
-        res.redirect(`/widget?user=${userProfile.id}`);
+        const destination = req.query.state === 'config'
+            ? `/config?user=${userProfile.id}`
+            : `/?user_id=${userProfile.id}&status=connected`;
+        res.redirect(destination);
     } catch (error) {
         console.error('Error during authentication:', error.response ? error.response.data : error.message);
         res.status(500).send('Error during authentication');
@@ -238,6 +222,52 @@ app.get('/now-playing', ensureAccessToken, async (req, res) => {
 // Endpoint to serve the widget HTML
 app.get('/widget', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'widget.html'));
+});
+
+// Endpoint to serve the widget appearance config page
+app.get('/config', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'config.html'));
+});
+
+// Stripe Checkout Session
+app.post('/create-checkout-session', async (req, res) => {
+    try {
+        // Mock payment session for verification
+        console.log('Creating mock checkout session');
+        res.json({ mock: true });
+
+        /* 
+        const session = await stripe.checkout.sessions.create({
+            payment_method_types: ['card'],
+            line_items: [{
+                price_data: {
+                    currency: 'usd',
+                    product_data: {
+                        name: 'Tiny Tune Widget Access',
+                    },
+                    unit_amount: 500,
+                },
+                quantity: 1,
+            }],
+            mode: 'payment',
+            success_url: `${req.protocol}://${req.get('host')}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${req.protocol}://${req.get('host')}/`,
+        });
+
+        res.json({ id: session.id });
+        */
+    } catch (error) {
+        console.error('Error creating checkout session:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Payment Success Endpoint
+app.get('/payment-success', (req, res) => {
+    // In a real app, you might verify the session_id with Stripe here
+    // For now, we just serve a success page or redirect to a success state on the landing page
+    // We'll serve the index.html but with a query param to trigger the success state
+    res.redirect('/?payment=success');
 });
 
 // Logout endpoint

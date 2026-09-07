@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tiny Tune Widget - Premium Spotify Widget</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://js.stripe.com/v3/"></script>
+</head>
+
+<body class="landing-page">
+    <nav class="navbar">
+        <div class="logo">Tiny Tune</div>
+        <a href="#buy" class="btn-nav">Get Access</a>
+    </nav>
+
+    <header class="hero">
+        <div class="hero-content">
+            <h1>Showcase Your Vibe.</h1>
+            <p>The ultimate Spotify widget for your personal site. Minimal, beautiful, and always in sync.</p>
+            <button id="buy-btn-hero" class="btn-primary">Get Access - $5</button>
+            <p class="subtext">One-time payment. Forever yours.</p>
+        </div>
+        <div class="hero-visual">
+            <!-- Simulated Widget Preview -->
+            <div class="widget-preview">
+                <div class="lp-record-preview">
+                    <div class="album-cover-preview"></div>
+                </div>
+                <div class="track-info-preview">
+                    <div class="live-indicator">
+                        <span class="live-dot"></span>
+                        <span class="live-text">Currently listening to</span>
+                    </div>
+                    <h3>Midnight City</h3>
+                    <p>M83</p>
+                    <div class="progress-bar-container-preview">
+                        <div class="progress-bar-preview"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section class="features">
+        <div class="feature-card">
+            <h3>Live Sync</h3>
+            <p>Updates in real-time with your Spotify playback.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Premium Design</h3>
+            <p>Glassmorphism, smooth animations, and dark mode.</p>
+        </div>
+        <div class="feature-card">
+            <h3>Easy Setup</h3>
+            <p>One-click login and instant widget generation.</p>
+        </div>
+    </section>
+
+    <!-- Success / Login Section (Hidden initially) -->
+    <div id="login-section" class="modal hidden">
+        <div class="modal-content success-content">
+            <h2>Payment Successful!</h2>
+            <p>You're all set. Connect your Spotify account to generate your widget.</p>
+            <a href="/login" class="btn-spotify">Login with Spotify</a>
+        </div>
+    </div>
+
+    <!-- Snippet Generation Section (Hidden initially) -->
+    <div id="snippet-section" class="modal hidden">
+        <div class="modal-content snippet-content">
+            <span class="close-modal">&times;</span>
+            <h2>Your Widget is Ready!</h2>
+            <p>Customize your widget and copy the code below.</p>
+
+            <div class="customization-controls">
+                <div class="control-group">
+                    <label>Theme</label>
+                    <div class="theme-toggle">
+                        <button class="btn-theme active" data-theme="dark">Dark</button>
+                        <button class="btn-theme" data-theme="light">Light</button>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>Accent Color</label>
+                    <input type="color" id="accent-color" value="#1db954">
+                </div>
+            </div>
+
+            <div class="code-block-container">
+                <pre><code id="widget-snippet"></code></pre>
+                <button id="copy-btn" class="btn-copy">Copy Code</button>
+            </div>
+            <p class="preview-link">Preview your widget <a href="#" id="preview-url" target="_blank">here</a>.</p>
+            <p class="preview-link">Want more styles? <a href="#" id="config-link">Customize further</a>.</p>
+        </div>
+    </div>
+
+    <script src="/landing.js"></script>
+</body>
+
+</html>

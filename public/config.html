@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customize Your Widget - Tiny Tune</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body class="landing-page">
+    <nav class="navbar">
+        <div class="logo">Tiny Tune</div>
+        <a href="/" class="btn-nav">Back Home</a>
+    </nav>
+
+    <main class="config-page">
+        <div id="no-user-notice" class="modal-content config-notice" hidden>
+            <h2>Connect Spotify First</h2>
+            <p>You need to connect your Spotify account before you can customize your widget.</p>
+            <a href="/login?redirect=config" class="btn-spotify">Login with Spotify</a>
+        </div>
+
+        <div id="config-content" hidden>
+            <h1>Customize Your Widget</h1>
+            <p class="subtext">Pick a style, tweak the colors, and copy the embed code.</p>
+
+            <div class="config-layout">
+                <div class="config-controls">
+                    <div class="control-group control-group--full">
+                        <label>Style</label>
+                        <div class="variant-grid">
+                            <button class="variant-option active" data-variant="card">
+                                <span class="variant-option__name">Card</span>
+                                <span class="variant-option__desc">Full player with spinning record & progress
+                                    bar</span>
+                            </button>
+                            <button class="variant-option" data-variant="compact">
+                                <span class="variant-option__name">Compact</span>
+                                <span class="variant-option__desc">Small artwork with track & artist</span>
+                            </button>
+                            <button class="variant-option" data-variant="minimal">
+                                <span class="variant-option__name">Minimal</span>
+                                <span class="variant-option__desc">One line of text — matches ericjacobson.se</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Theme</label>
+                        <div class="theme-toggle">
+                            <button class="btn-theme active" data-theme="dark">Dark</button>
+                            <button class="btn-theme" data-theme="light">Light</button>
+                        </div>
+                    </div>
+
+                    <div class="control-group" id="accent-control">
+                        <label>Accent Color</label>
+                        <input type="color" id="accent-color" value="#1db954">
+                    </div>
+                </div>
+
+                <div class="config-preview">
+                    <label>Preview</label>
+                    <div class="preview-frame">
+                        <iframe id="preview-iframe" src="" width="350" height="150" frameborder="0"></iframe>
+                    </div>
+                </div>
+            </div>
+
+            <div class="code-block-container">
+                <pre><code id="widget-snippet"></code></pre>
+                <button id="copy-btn" class="btn-copy">Copy Code</button>
+            </div>
+            <p class="preview-link">Open the widget in a new tab <a href="#" id="preview-url"
+                    target="_blank">here</a>.</p>
+        </div>
+    </main>
+
+    <script src="/config.js"></script>
+</body>
+
+</html>
