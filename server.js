@@ -18,6 +18,19 @@ const client = new MongoClient(uri);
 let usersCollection;
 let dbReadyPromise = null;
 
+// Refresh tokens this many seconds before Spotify's stated expiry, so a token
+// cannot lapse midway through a request we have already started.
+const TOKEN_EXPIRY_SKEW_S = 60;
+
+// Raised when a user's Spotify authorization cannot be repaired on our side.
+// The widget should ask them to reconnect rather than keep retrying.
+class ReauthRequired extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'ReauthRequired';
+    }
+}
+
 // Improved MongoDB connection handling with retry logic
 const connectToDB = async (retries = 5, delay = 3000) => {
     while (retries) {
@@ -132,31 +145,59 @@ app.get('/callback', async (req, res) => {
     }
 });
 
+// A token with no recorded lifetime is treated as expired rather than valid,
+// so a half-written user document fails safe into a refresh.
+const isTokenExpired = (user) => {
+    if (typeof user.token_received_time !== 'number' || typeof user.expires_in !== 'number') {
+        return true;
+    }
+    return Date.now() / 1000 >= (user.token_received_time + user.expires_in - TOKEN_EXPIRY_SKEW_S);
+};
+
 // Middleware to ensure the access token is valid
 const ensureAccessToken = async (req, res, next) => {
+    const spotifyId = req.query.user;
+    if (!spotifyId) {
+        return res.status(400).json({ error: 'missing_user' });
+    }
+
     try {
         const collection = await ensureUsersCollection();
-        const user = await collection.findOne({ spotifyId: req.query.user });
+        const user = await collection.findOne({ spotifyId });
         if (!user) {
-            return res.status(401).send('User not found');
+            return res.status(404).json({ error: 'unknown_user' });
+        }
+        // Logging out unsets the tokens, so a known user can still be disconnected.
+        if (!user.access_token && !user.refresh_token) {
+            throw new ReauthRequired('User has no stored tokens');
+        }
+        if (!user.access_token || isTokenExpired(user)) {
+            await refreshAccessToken(user);
         }
 
-        const isTokenExpired = (user) => Date.now() / 1000 >= (user.token_received_time + user.expires_in);
-        if (isTokenExpired(user)) await refreshAccessToken(user);
         req.user = user;
         next();
     } catch (error) {
+        if (error instanceof ReauthRequired) {
+            console.warn(`Re-auth required for ${spotifyId}: ${error.message}`);
+            return res.status(401).json({ error: 'reauth_required' });
+        }
+        // A refresh that failed for a transient reason is worth retrying, so
+        // report it as unavailable instead of telling the widget to give up.
         console.error('Error ensuring access token:', error.message);
-        res.status(500).send('Authentication error, please try again.');
+        res.status(503).json({ error: 'auth_unavailable' });
     }
 };
 
-// Function to refresh the access token
+// Refresh the access token in place. Throws on failure: callers must not be
+// allowed to continue with a token they know to be expired, because Spotify
+// would reject it and the widget would see an opaque server error.
 const refreshAccessToken = async (user) => {
-    try {
-        if (!user.refresh_token) throw new Error('No refresh token available');
+    if (!user.refresh_token) throw new ReauthRequired('No refresh token available');
 
-        const response = await axios.post('https://accounts.spotify.com/api/token', querystring.stringify({
+    let response;
+    try {
+        response = await axios.post('https://accounts.spotify.com/api/token', querystring.stringify({
             grant_type: 'refresh_token',
             refresh_token: user.refresh_token,
             client_id,
@@ -164,35 +205,61 @@ const refreshAccessToken = async (user) => {
         }), {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
-
-        if (response.data.access_token) {
-            user.access_token = response.data.access_token;
-            user.expires_in = response.data.expires_in || 1800; // Default to 1800 seconds if not provided
-            user.token_received_time = Math.floor(Date.now() / 1000);
-            user.refresh_token_last_used = user.token_received_time;
-
-            console.log('Access token refreshed:', user.access_token);
-
-            const collection = await ensureUsersCollection();
-            await collection.updateOne(
-                { spotifyId: user.spotifyId },
-                { $set: user }
-            );
-        } else {
-            console.error('Failed to refresh access token:', response.data);
-        }
     } catch (error) {
-        console.error('Error refreshing access token:', error.message);
+        const details = error.response ? error.response.data : error.message;
+        console.error('Error refreshing access token:', details);
+        // invalid_grant means the user revoked access or the token was rotated
+        // away from us — retrying can never fix it.
+        if (error.response && error.response.data && error.response.data.error === 'invalid_grant') {
+            throw new ReauthRequired('Spotify rejected the refresh token');
+        }
+        throw error;  // Transient; the caller may retry.
     }
+
+    if (!response.data.access_token) {
+        throw new ReauthRequired('Refresh response contained no access token');
+    }
+
+    user.access_token = response.data.access_token;
+    user.expires_in = response.data.expires_in || 3600;
+    user.token_received_time = Math.floor(Date.now() / 1000);
+    user.refresh_token_last_used = user.token_received_time;
+    // Spotify may hand back a rotated refresh token; keep the newest one.
+    if (response.data.refresh_token) {
+        user.refresh_token = response.data.refresh_token;
+    }
+
+    // Never log the token value itself — these logs are retained.
+    console.log(`Access token refreshed for ${user.spotifyId}`);
+
+    const collection = await ensureUsersCollection();
+    await collection.updateOne(
+        { spotifyId: user.spotifyId },
+        {
+            $set: {
+                access_token: user.access_token,
+                refresh_token: user.refresh_token,
+                expires_in: user.expires_in,
+                token_received_time: user.token_received_time,
+                refresh_token_last_used: user.refresh_token_last_used
+            }
+        }
+    );
 };
 
 // Endpoint to refresh the access token
 app.get('/refresh_token', ensureAccessToken, async (req, res) => {
     try {
         await refreshAccessToken(req.user);
-        res.json({ access_token: req.user.access_token });
+        // The token itself is never echoed back to the browser; the widget
+        // talks to /now-playing and has no use for it.
+        res.json({ refreshed: true, expires_in: req.user.expires_in });
     } catch (error) {
-        res.status(500).send('Error refreshing access token');
+        if (error instanceof ReauthRequired) {
+            return res.status(401).json({ error: 'reauth_required' });
+        }
+        console.error('Error refreshing access token:', error.message);
+        res.status(503).json({ error: 'refresh_unavailable' });
     }
 });
 
