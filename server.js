@@ -18,6 +18,33 @@ const client = new MongoClient(uri);
 let usersCollection;
 let dbReadyPromise = null;
 
+// Refresh tokens this many seconds before Spotify's stated expiry, so a token
+// cannot lapse midway through a request we have already started.
+const TOKEN_EXPIRY_SKEW_S = 60;
+
+// Every embedded widget polls /now-playing, so collapse bursts of requests for
+// the same user into a single Spotify call. This lives in memory and is
+// therefore per-instance, which is all it needs to be: it exists to keep one
+// viewer's polling (and a handful of concurrent viewers) off Spotify's rate
+// limit, not to be a shared cache.
+const NOW_PLAYING_CACHE_TTL_MS = 4000;
+
+// How stale the stored "last played" timestamp may get while a track is still
+// playing. Bounds the write rate to roughly one per user per minute.
+const LAST_PLAYED_REFRESH_MS = 60000;
+
+const nowPlayingCache = new Map();   // spotifyId -> { expiresAt, payload }
+const lastPlayedWrites = new Map();  // spotifyId -> { trackId, writtenAt }
+
+// Raised when a user's Spotify authorization cannot be repaired on our side.
+// The widget should ask them to reconnect rather than keep retrying.
+class ReauthRequired extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'ReauthRequired';
+    }
+}
+
 // Improved MongoDB connection handling with retry logic
 const connectToDB = async (retries = 5, delay = 3000) => {
     while (retries) {
@@ -132,31 +159,59 @@ app.get('/callback', async (req, res) => {
     }
 });
 
+// A token with no recorded lifetime is treated as expired rather than valid,
+// so a half-written user document fails safe into a refresh.
+const isTokenExpired = (user) => {
+    if (typeof user.token_received_time !== 'number' || typeof user.expires_in !== 'number') {
+        return true;
+    }
+    return Date.now() / 1000 >= (user.token_received_time + user.expires_in - TOKEN_EXPIRY_SKEW_S);
+};
+
 // Middleware to ensure the access token is valid
 const ensureAccessToken = async (req, res, next) => {
+    const spotifyId = req.query.user;
+    if (!spotifyId) {
+        return res.status(400).json({ error: 'missing_user' });
+    }
+
     try {
         const collection = await ensureUsersCollection();
-        const user = await collection.findOne({ spotifyId: req.query.user });
+        const user = await collection.findOne({ spotifyId });
         if (!user) {
-            return res.status(401).send('User not found');
+            return res.status(404).json({ error: 'unknown_user' });
+        }
+        // Logging out unsets the tokens, so a known user can still be disconnected.
+        if (!user.access_token && !user.refresh_token) {
+            throw new ReauthRequired('User has no stored tokens');
+        }
+        if (!user.access_token || isTokenExpired(user)) {
+            await refreshAccessToken(user);
         }
 
-        const isTokenExpired = (user) => Date.now() / 1000 >= (user.token_received_time + user.expires_in);
-        if (isTokenExpired(user)) await refreshAccessToken(user);
         req.user = user;
         next();
     } catch (error) {
+        if (error instanceof ReauthRequired) {
+            console.warn(`Re-auth required for ${spotifyId}: ${error.message}`);
+            return res.status(401).json({ error: 'reauth_required' });
+        }
+        // A refresh that failed for a transient reason is worth retrying, so
+        // report it as unavailable instead of telling the widget to give up.
         console.error('Error ensuring access token:', error.message);
-        res.status(500).send('Authentication error, please try again.');
+        res.status(503).json({ error: 'auth_unavailable' });
     }
 };
 
-// Function to refresh the access token
+// Refresh the access token in place. Throws on failure: callers must not be
+// allowed to continue with a token they know to be expired, because Spotify
+// would reject it and the widget would see an opaque server error.
 const refreshAccessToken = async (user) => {
-    try {
-        if (!user.refresh_token) throw new Error('No refresh token available');
+    if (!user.refresh_token) throw new ReauthRequired('No refresh token available');
 
-        const response = await axios.post('https://accounts.spotify.com/api/token', querystring.stringify({
+    let response;
+    try {
+        response = await axios.post('https://accounts.spotify.com/api/token', querystring.stringify({
             grant_type: 'refresh_token',
             refresh_token: user.refresh_token,
             client_id,
@@ -164,59 +219,193 @@ const refreshAccessToken = async (user) => {
         }), {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
-
-        if (response.data.access_token) {
-            user.access_token = response.data.access_token;
-            user.expires_in = response.data.expires_in || 1800; // Default to 1800 seconds if not provided
-            user.token_received_time = Math.floor(Date.now() / 1000);
-            user.refresh_token_last_used = user.token_received_time;
-
-            console.log('Access token refreshed:', user.access_token);
-
-            const collection = await ensureUsersCollection();
-            await collection.updateOne(
-                { spotifyId: user.spotifyId },
-                { $set: user }
-            );
-        } else {
-            console.error('Failed to refresh access token:', response.data);
-        }
     } catch (error) {
-        console.error('Error refreshing access token:', error.message);
+        const details = error.response ? error.response.data : error.message;
+        console.error('Error refreshing access token:', details);
+        // invalid_grant means the user revoked access or the token was rotated
+        // away from us — retrying can never fix it.
+        if (error.response && error.response.data && error.response.data.error === 'invalid_grant') {
+            throw new ReauthRequired('Spotify rejected the refresh token');
+        }
+        throw error;  // Transient; the caller may retry.
     }
+
+    if (!response.data.access_token) {
+        throw new ReauthRequired('Refresh response contained no access token');
+    }
+
+    user.access_token = response.data.access_token;
+    user.expires_in = response.data.expires_in || 3600;
+    user.token_received_time = Math.floor(Date.now() / 1000);
+    user.refresh_token_last_used = user.token_received_time;
+    // Spotify may hand back a rotated refresh token; keep the newest one.
+    if (response.data.refresh_token) {
+        user.refresh_token = response.data.refresh_token;
+    }
+
+    // Never log the token value itself — these logs are retained.
+    console.log(`Access token refreshed for ${user.spotifyId}`);
+
+    const collection = await ensureUsersCollection();
+    await collection.updateOne(
+        { spotifyId: user.spotifyId },
+        {
+            $set: {
+                access_token: user.access_token,
+                refresh_token: user.refresh_token,
+                expires_in: user.expires_in,
+                token_received_time: user.token_received_time,
+                refresh_token_last_used: user.refresh_token_last_used
+            }
+        }
+    );
 };
 
 // Endpoint to refresh the access token
 app.get('/refresh_token', ensureAccessToken, async (req, res) => {
     try {
         await refreshAccessToken(req.user);
-        res.json({ access_token: req.user.access_token });
+        // The token itself is never echoed back to the browser; the widget
+        // talks to /now-playing and has no use for it.
+        res.json({ refreshed: true, expires_in: req.user.expires_in });
     } catch (error) {
-        res.status(500).send('Error refreshing access token');
+        if (error instanceof ReauthRequired) {
+            return res.status(401).json({ error: 'reauth_required' });
+        }
+        console.error('Error refreshing access token:', error.message);
+        res.status(503).json({ error: 'refresh_unavailable' });
     }
 });
 
-// Endpoint to get currently playing track
-app.get('/now-playing', ensureAccessToken, async (req, res) => {
+// Spotify returns artwork largest-first (typically 640/300/64). The widget
+// draws it at 48px, so ship the smallest size that still looks sharp at 2x
+// rather than making every viewer download the 640px original.
+const pickArtwork = (images) => {
+    if (!Array.isArray(images)) return null;
+    const usable = images
+        .filter(image => image && image.url)
+        .sort((a, b) => (a.width || 0) - (b.width || 0));
+    if (usable.length === 0) return null;
+    const sharpEnough = usable.find(image => (image.width || 0) >= 96);
+    return (sharpEnough || usable[usable.length - 1]).url;
+};
+
+// Flatten Spotify's payload into the shape the widget renders, so the client
+// never has to know that tracks carry album/artists while podcast episodes
+// carry show/images — reading the wrong one used to throw and blank the widget.
+const normalizeItem = (item) => {
+    if (!item || !item.name) return null;
+
+    const isEpisode = item.type === 'episode';
+    const images = isEpisode
+        ? (item.images || (item.show && item.show.images))
+        : (item.album && item.album.images);
+    const artists = Array.isArray(item.artists)
+        ? item.artists.map(artist => artist && artist.name).filter(Boolean)
+        : [];
+
+    return {
+        id: item.id || null,
+        title: item.name,
+        subtitle: isEpisode ? ((item.show && item.show.name) || '') : artists.join(', '),
+        albumCover: pickArtwork(images),
+        durationMs: typeof item.duration_ms === 'number' ? item.duration_ms : null,
+        url: (item.external_urls && item.external_urls.spotify) || null
+    };
+};
+
+// Remember what is playing so the widget can show "last played at" once
+// playback stops — including after a reload, which the old client-side-only
+// copy could never survive. Throttled so polling does not mean writing.
+const rememberLastPlayed = async (spotifyId, item) => {
+    const now = Date.now();
+    const written = lastPlayedWrites.get(spotifyId);
+    if (written && written.trackId === item.id && now - written.writtenAt < LAST_PLAYED_REFRESH_MS) {
+        return;
+    }
+
+    lastPlayedWrites.set(spotifyId, { trackId: item.id, writtenAt: now });
     try {
-        const response = await axios.get('https://api.spotify.com/v1/me/player/currently-playing', {
+        const collection = await ensureUsersCollection();
+        await collection.updateOne(
+            { spotifyId },
+            { $set: { last_played: { item, playedAt: new Date(now).toISOString() } } }
+        );
+    } catch (error) {
+        // Losing this is cosmetic — never fail a now-playing request over it.
+        console.error('Could not store last played track:', error.message);
+        lastPlayedWrites.delete(spotifyId);
+    }
+};
+
+// Endpoint to get currently playing track.
+//
+// Always answers with { state, item, progressMs, playedAt }:
+//   state 'playing' — item is live, progressMs is where it is now
+//   state 'paused'  — item is loaded on a device but stopped
+//   state 'idle'    — nothing active; item/playedAt describe what we last saw
+// The paused payload is passed through rather than discarded, so the widget can
+// render real track details instead of guessing from memory.
+app.get('/now-playing', ensureAccessToken, async (req, res) => {
+    const spotifyId = req.user.spotifyId;
+
+    const cached = nowPlayingCache.get(spotifyId);
+    if (cached && cached.expiresAt > Date.now()) {
+        return res.json(cached.payload);
+    }
+
+    let response;
+    try {
+        // 204 (nothing active on any device) is a normal answer, not an error,
+        // and arrives here as an empty body.
+        response = await axios.get('https://api.spotify.com/v1/me/player/currently-playing', {
             headers: { 'Authorization': `Bearer ${req.user.access_token}` }
         });
-
-        if (response.data && response.data.is_playing) {
-            res.json(response.data);
-        } else {
-            // If no song is playing, respond with last played information
-            const lastPlayed = {
-                message: 'No track currently playing',
-                last_played_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            };
-            res.json(lastPlayed);
-        }
     } catch (error) {
+        const status = error.response && error.response.status;
+        if (status === 401) {
+            return res.status(401).json({ error: 'reauth_required' });
+        }
+        if (status === 429) {
+            const retryAfter = (error.response.headers && error.response.headers['retry-after']) || '5';
+            res.set('Retry-After', String(retryAfter));
+            return res.status(429).json({ error: 'rate_limited' });
+        }
         console.error('Error fetching now-playing data:', error.message);
-        res.status(500).send('Error fetching now-playing data');
+        return res.status(502).json({ error: 'spotify_unavailable' });
     }
+
+    const data = response.data || null;
+    const item = normalizeItem(data && data.item);
+    const lastPlayed = req.user.last_played || null;
+    let payload;
+
+    if (item) {
+        const isPlaying = Boolean(data.is_playing);
+        if (isPlaying) {
+            await rememberLastPlayed(spotifyId, item);
+        }
+        payload = {
+            state: isPlaying ? 'playing' : 'paused',
+            item,
+            progressMs: typeof data.progress_ms === 'number' ? data.progress_ms : null,
+            // When paused, the stored timestamp is when we last saw this same
+            // thing actually playing. For anything else it would be misleading.
+            playedAt: (!isPlaying && lastPlayed && lastPlayed.item && lastPlayed.item.id === item.id)
+                ? lastPlayed.playedAt
+                : null
+        };
+    } else {
+        payload = {
+            state: 'idle',
+            item: lastPlayed ? lastPlayed.item : null,
+            progressMs: null,
+            playedAt: lastPlayed ? lastPlayed.playedAt : null
+        };
+    }
+
+    nowPlayingCache.set(spotifyId, { expiresAt: Date.now() + NOW_PLAYING_CACHE_TTL_MS, payload });
+    res.json(payload);
 });
 
 // Endpoint to serve the widget HTML
@@ -281,8 +470,16 @@ app.get('/logout', async (req, res) => {
         // Clear the tokens for the specific user
         const collection = await ensureUsersCollection();
         await collection.updateOne({ spotifyId: userId }, {
-            $unset: { access_token: '', refresh_token: '', token_received_time: '', expires_in: '' }
+            $unset: {
+                access_token: '', refresh_token: '', token_received_time: '',
+                expires_in: '', last_played: ''
+            }
         });
+
+        // Otherwise a widget would keep serving this user's track for the
+        // lifetime of the cache entry after they disconnected.
+        nowPlayingCache.delete(userId);
+        lastPlayedWrites.delete(userId);
 
         res.redirect('/');
     } catch (error) {

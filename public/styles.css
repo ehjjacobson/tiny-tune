@@ -658,11 +658,57 @@ input[type="color"]::-webkit-color-swatch {
     color: #666;
 }
 
-#last-played {
-    font-size: 0.85em;
+/* --------------------------------------------------------------------------
+   Playback states
+
+   The script sets exactly one body.state-* class plus .no-progress, and never
+   touches display/animation inline. Everything below is therefore reversible
+   by definition: resuming playback swaps the class back and the widget
+   returns to its playing appearance with nothing left over.
+   -------------------------------------------------------------------------- */
+
+/* The record only spins, and the dot only pulses, while audio is playing --
+   otherwise the widget animates as though it were live when it is not. */
+body:not(.state-playing) .lp-record {
+    animation-play-state: paused;
+}
+
+body:not(.state-playing) .live-dot,
+body:not(.state-playing) .minimal-dot::before {
+    animation: none;
+}
+
+body:not(.state-playing) .live-dot,
+body:not(.state-playing) .minimal-dot {
+    opacity: 0.45;
+}
+
+/* No position to show (paused without progress, idle, error): the row becomes
+   a single status line, so the bar and the duration column step aside and the
+   time label stops being a fixed 32px gutter. */
+body.no-progress .progress-bar-wrapper,
+body.no-progress .track-duration {
+    display: none;
+}
+
+body.no-progress .progress-time {
+    width: auto;
+    text-align: left;
     color: var(--subtext-color);
-    text-align: center;
-    margin-top: 10px;
+}
+
+/* Nothing to click through to until we know what is playing. */
+body.state-loading .player-link,
+body.state-error .player-link,
+body.state-reauth .player-link,
+body.state-unconfigured .player-link {
+    cursor: default;
+}
+
+/* Dim the artwork placeholder so an empty cover reads as a blank record
+   rather than a hole in the layout. */
+body:not(.state-playing):not(.state-paused) .album-cover {
+    background-color: var(--progress-bg);
 }
 
 /* --------------------------------------------------------------------------
