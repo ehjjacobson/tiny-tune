@@ -22,6 +22,20 @@ let dbReadyPromise = null;
 // cannot lapse midway through a request we have already started.
 const TOKEN_EXPIRY_SKEW_S = 60;
 
+// Every embedded widget polls /now-playing, so collapse bursts of requests for
+// the same user into a single Spotify call. This lives in memory and is
+// therefore per-instance, which is all it needs to be: it exists to keep one
+// viewer's polling (and a handful of concurrent viewers) off Spotify's rate
+// limit, not to be a shared cache.
+const NOW_PLAYING_CACHE_TTL_MS = 4000;
+
+// How stale the stored "last played" timestamp may get while a track is still
+// playing. Bounds the write rate to roughly one per user per minute.
+const LAST_PLAYED_REFRESH_MS = 60000;
+
+const nowPlayingCache = new Map();   // spotifyId -> { expiresAt, payload }
+const lastPlayedWrites = new Map();  // spotifyId -> { trackId, writtenAt }
+
 // Raised when a user's Spotify authorization cannot be repaired on our side.
 // The widget should ask them to reconnect rather than keep retrying.
 class ReauthRequired extends Error {
@@ -263,27 +277,135 @@ app.get('/refresh_token', ensureAccessToken, async (req, res) => {
     }
 });
 
-// Endpoint to get currently playing track
-app.get('/now-playing', ensureAccessToken, async (req, res) => {
+// Spotify returns artwork largest-first (typically 640/300/64). The widget
+// draws it at 48px, so ship the smallest size that still looks sharp at 2x
+// rather than making every viewer download the 640px original.
+const pickArtwork = (images) => {
+    if (!Array.isArray(images)) return null;
+    const usable = images
+        .filter(image => image && image.url)
+        .sort((a, b) => (a.width || 0) - (b.width || 0));
+    if (usable.length === 0) return null;
+    const sharpEnough = usable.find(image => (image.width || 0) >= 96);
+    return (sharpEnough || usable[usable.length - 1]).url;
+};
+
+// Flatten Spotify's payload into the shape the widget renders, so the client
+// never has to know that tracks carry album/artists while podcast episodes
+// carry show/images — reading the wrong one used to throw and blank the widget.
+const normalizeItem = (item) => {
+    if (!item || !item.name) return null;
+
+    const isEpisode = item.type === 'episode';
+    const images = isEpisode
+        ? (item.images || (item.show && item.show.images))
+        : (item.album && item.album.images);
+    const artists = Array.isArray(item.artists)
+        ? item.artists.map(artist => artist && artist.name).filter(Boolean)
+        : [];
+
+    return {
+        id: item.id || null,
+        title: item.name,
+        subtitle: isEpisode ? ((item.show && item.show.name) || '') : artists.join(', '),
+        albumCover: pickArtwork(images),
+        durationMs: typeof item.duration_ms === 'number' ? item.duration_ms : null,
+        url: (item.external_urls && item.external_urls.spotify) || null
+    };
+};
+
+// Remember what is playing so the widget can show "last played at" once
+// playback stops — including after a reload, which the old client-side-only
+// copy could never survive. Throttled so polling does not mean writing.
+const rememberLastPlayed = async (spotifyId, item) => {
+    const now = Date.now();
+    const written = lastPlayedWrites.get(spotifyId);
+    if (written && written.trackId === item.id && now - written.writtenAt < LAST_PLAYED_REFRESH_MS) {
+        return;
+    }
+
+    lastPlayedWrites.set(spotifyId, { trackId: item.id, writtenAt: now });
     try {
-        const response = await axios.get('https://api.spotify.com/v1/me/player/currently-playing', {
+        const collection = await ensureUsersCollection();
+        await collection.updateOne(
+            { spotifyId },
+            { $set: { last_played: { item, playedAt: new Date(now).toISOString() } } }
+        );
+    } catch (error) {
+        // Losing this is cosmetic — never fail a now-playing request over it.
+        console.error('Could not store last played track:', error.message);
+        lastPlayedWrites.delete(spotifyId);
+    }
+};
+
+// Endpoint to get currently playing track.
+//
+// Always answers with { state, item, progressMs, playedAt }:
+//   state 'playing' — item is live, progressMs is where it is now
+//   state 'paused'  — item is loaded on a device but stopped
+//   state 'idle'    — nothing active; item/playedAt describe what we last saw
+// The paused payload is passed through rather than discarded, so the widget can
+// render real track details instead of guessing from memory.
+app.get('/now-playing', ensureAccessToken, async (req, res) => {
+    const spotifyId = req.user.spotifyId;
+
+    const cached = nowPlayingCache.get(spotifyId);
+    if (cached && cached.expiresAt > Date.now()) {
+        return res.json(cached.payload);
+    }
+
+    let response;
+    try {
+        // 204 (nothing active on any device) is a normal answer, not an error,
+        // and arrives here as an empty body.
+        response = await axios.get('https://api.spotify.com/v1/me/player/currently-playing', {
             headers: { 'Authorization': `Bearer ${req.user.access_token}` }
         });
-
-        if (response.data && response.data.is_playing) {
-            res.json(response.data);
-        } else {
-            // If no song is playing, respond with last played information
-            const lastPlayed = {
-                message: 'No track currently playing',
-                last_played_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            };
-            res.json(lastPlayed);
-        }
     } catch (error) {
+        const status = error.response && error.response.status;
+        if (status === 401) {
+            return res.status(401).json({ error: 'reauth_required' });
+        }
+        if (status === 429) {
+            const retryAfter = (error.response.headers && error.response.headers['retry-after']) || '5';
+            res.set('Retry-After', String(retryAfter));
+            return res.status(429).json({ error: 'rate_limited' });
+        }
         console.error('Error fetching now-playing data:', error.message);
-        res.status(500).send('Error fetching now-playing data');
+        return res.status(502).json({ error: 'spotify_unavailable' });
     }
+
+    const data = response.data || null;
+    const item = normalizeItem(data && data.item);
+    const lastPlayed = req.user.last_played || null;
+    let payload;
+
+    if (item) {
+        const isPlaying = Boolean(data.is_playing);
+        if (isPlaying) {
+            await rememberLastPlayed(spotifyId, item);
+        }
+        payload = {
+            state: isPlaying ? 'playing' : 'paused',
+            item,
+            progressMs: typeof data.progress_ms === 'number' ? data.progress_ms : null,
+            // When paused, the stored timestamp is when we last saw this same
+            // thing actually playing. For anything else it would be misleading.
+            playedAt: (!isPlaying && lastPlayed && lastPlayed.item && lastPlayed.item.id === item.id)
+                ? lastPlayed.playedAt
+                : null
+        };
+    } else {
+        payload = {
+            state: 'idle',
+            item: lastPlayed ? lastPlayed.item : null,
+            progressMs: null,
+            playedAt: lastPlayed ? lastPlayed.playedAt : null
+        };
+    }
+
+    nowPlayingCache.set(spotifyId, { expiresAt: Date.now() + NOW_PLAYING_CACHE_TTL_MS, payload });
+    res.json(payload);
 });
 
 // Endpoint to serve the widget HTML
@@ -348,8 +470,16 @@ app.get('/logout', async (req, res) => {
         // Clear the tokens for the specific user
         const collection = await ensureUsersCollection();
         await collection.updateOne({ spotifyId: userId }, {
-            $unset: { access_token: '', refresh_token: '', token_received_time: '', expires_in: '' }
+            $unset: {
+                access_token: '', refresh_token: '', token_received_time: '',
+                expires_in: '', last_played: ''
+            }
         });
+
+        // Otherwise a widget would keep serving this user's track for the
+        // lifetime of the cache entry after they disconnected.
+        nowPlayingCache.delete(userId);
+        lastPlayedWrites.delete(userId);
 
         res.redirect('/');
     } catch (error) {
