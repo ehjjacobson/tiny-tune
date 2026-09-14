@@ -9,7 +9,9 @@
 </head>
 
 <body>
-    <div id="now-playing">
+    <!-- Hidden until the script confirms something is playing, so the page
+         never flashes placeholder text and stays blank if the script fails. -->
+    <div id="now-playing" hidden>
         <a id="spotify-link" href="#" target="_blank" class="player-link">
             <div class="player-container">
                 <div class="lp-record">

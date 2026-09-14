@@ -68,6 +68,12 @@
         return value && value.trim() ? value.trim() : null;
     })();
 
+    // The widget hides itself whenever nothing is playing, which would leave
+    // the config page previewing an empty box. preview=1 keeps it on screen in
+    // every state so the appearance can still be chosen. The embed snippet the
+    // config page hands out never carries it.
+    const previewMode = new URLSearchParams(window.location.search).get('preview') === '1';
+
     // --- Rendering ----------------------------------------------------------
 
     function setState(next) {
@@ -161,7 +167,16 @@
         el.progressBar.style.width = '0%';
     }
 
+    // Nothing playing means nothing on screen: the widget should not announce a
+    // song that stopped, and an embed with no music is meant to disappear
+    // rather than sit there as an empty card.
+    function updateVisibility() {
+        el.widget.hidden = !(previewMode || view.state === 'playing');
+    }
+
     function render() {
+        updateVisibility();
+
         const item = view.item;
         const placeholder = placeholderText();
         const title = item ? item.title : placeholder.title;

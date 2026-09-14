@@ -521,6 +521,12 @@ input[type="color"]::-webkit-color-swatch {
     font-weight: 600;
 }
 
+.preview-note {
+    font-size: 0.8em;
+    color: var(--subtext-color);
+    margin: 0 0 10px;
+}
+
 .preview-frame {
     background: #0a0a0a;
     border: 1px solid rgba(255, 255, 255, 0.1);
