@@ -30,24 +30,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const previewHeights = { card: 150, compact: 90, minimal: 40 };
     const state = { variant: 'card', theme: 'dark', color: '#1db954' };
 
-    function buildWidgetUrl() {
+    // The live widget hides itself when no music is playing. Anywhere we are
+    // showing it *as a preview* we ask it to stay visible regardless, so the
+    // appearance can be chosen at any hour; the embed code never gets that flag.
+    function buildWidgetUrl({ preview = false } = {}) {
         const params = new URLSearchParams({ user: userId });
         if (state.variant !== 'card') params.set('variant', state.variant);
         if (state.theme !== 'dark') params.set('theme', state.theme);
         if (state.color !== '#1db954') params.set('color', state.color);
+        if (preview) params.set('preview', '1');
         return `${window.location.origin}/widget?${params.toString()}`;
     }
 
     function render() {
         const url = buildWidgetUrl();
+        const previewSrc = buildWidgetUrl({ preview: true });
         const height = previewHeights[state.variant];
 
-        previewIframe.src = url;
+        previewIframe.src = previewSrc;
         previewIframe.height = height;
 
         widgetSnippet.textContent =
             `<iframe src="${url}" width="350" height="${height}" frameborder="0" style="border-radius: 12px; overflow: hidden;"></iframe>`;
-        previewUrl.href = url;
+        previewUrl.href = previewSrc;
 
         // Accent color only affects the card/compact chrome (progress bar,
         // live dot) — the minimal variant has nothing for it to color.
