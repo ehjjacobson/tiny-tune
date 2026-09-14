@@ -50,8 +50,11 @@ document.addEventListener('DOMContentLoaded', () => {
         previewIframe.src = previewSrc;
         previewIframe.height = height;
 
+        // The second line is optional: without it the widget still disappears
+        // when nothing is playing, but the iframe keeps holding its space.
         widgetSnippet.textContent =
-            `<iframe src="${url}" width="350" height="${height}" frameborder="0" style="border-radius: 12px; overflow: hidden;"></iframe>`;
+            `<iframe src="${url}" width="350" height="${height}" frameborder="0" style="border-radius: 12px; overflow: hidden;"></iframe>\n`
+            + `<script src="${window.location.origin}/embed.js" async></script>`;
         previewUrl.href = previewSrc;
 
         // Accent color only affects the card/compact chrome (progress bar,

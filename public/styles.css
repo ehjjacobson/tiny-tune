@@ -521,6 +521,12 @@ input[type="color"]::-webkit-color-swatch {
     font-weight: 600;
 }
 
+.snippet-note {
+    font-size: 0.8em;
+    color: var(--subtext-color);
+    margin: 0 0 10px;
+}
+
 .preview-note {
     font-size: 0.8em;
     color: var(--subtext-color);
