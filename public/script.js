@@ -174,6 +174,25 @@
         el.widget.hidden = !(previewMode || view.state === 'playing');
     }
 
+    let lastEmbedMessage = null;
+
+    // Hiding our own content still leaves the <iframe> holding its box on the
+    // embedding page, so tell that page what we are doing and let embed.js
+    // collapse the space. Sent only when the answer changes.
+    function notifyEmbedder() {
+        if (window.parent === window) return;
+
+        const visible = !el.widget.hidden;
+        const height = visible ? Math.ceil(el.widget.getBoundingClientRect().height) : 0;
+        const fingerprint = `${visible}:${height}`;
+        if (fingerprint === lastEmbedMessage) return;
+        lastEmbedMessage = fingerprint;
+
+        // '*' because the embedding site's origin is unknowable from here. The
+        // payload is only whether there is a song and how tall it is.
+        window.parent.postMessage({ source: 'tiny-tune', type: 'visibility', visible, height }, '*');
+    }
+
     function render() {
         updateVisibility();
 
@@ -192,6 +211,7 @@
         if (el.liveText) el.liveText.textContent = statusLabel();
 
         renderProgress();
+        notifyEmbedder();
     }
 
     // --- Display tick -------------------------------------------------------
