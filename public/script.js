@@ -37,6 +37,7 @@
         progressTime: document.getElementById('progress-time'),
         progressBar: document.getElementById('progress-bar'),
         trackDuration: document.getElementById('track-duration'),
+        minimalLabel: document.getElementById('minimal-label'),
         minimalTitle: document.getElementById('minimal-title'),
         minimalArtist: document.getElementById('minimal-artist'),
         minimalSep: document.querySelector('.minimal-sep')
@@ -208,7 +209,9 @@
 
         const href = item && item.url;
         el.link.href = href || '#';
-        if (el.liveText) el.liveText.textContent = statusLabel();
+        const status = statusLabel();
+        if (el.liveText) el.liveText.textContent = status;
+        if (el.minimalLabel) el.minimalLabel.textContent = status;
 
         renderProgress();
         notifyEmbedder();

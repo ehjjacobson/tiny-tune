@@ -738,9 +738,23 @@ body.variant-compact .lp-record {
     margin-right: 12px;
 }
 
-body.variant-compact .live-indicator,
 body.variant-compact .progress-bar-container {
     display: none;
+}
+
+/* Compact carries the same status line as the card, dialled down so it reads
+   as a caption above the title rather than competing with it. */
+body.variant-compact .live-text {
+    font-size: 0.7em;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--subtext-color);
+    margin-left: 6px;
+}
+
+body.variant-compact .live-dot {
+    width: 5px;
+    height: 5px;
 }
 
 body.variant-compact .track-info h3 {
@@ -755,6 +769,9 @@ body.variant-compact .track-info h3 {
     display: none;
     align-items: center;
     gap: 8px;
+    /* Without this the inline-flex line just grows past the iframe and the
+       track name is chopped mid-word instead of ellipsising. */
+    max-width: 100%;
     font-family: 'Geist Mono', 'Courier New', monospace;
     font-size: 13px;
     letter-spacing: 0.01em;
@@ -792,6 +809,10 @@ body.variant-minimal .player-minimal {
 }
 
 .minimal-text {
+    /* A flex item will not shrink below its content width unless told to, which
+       is what makes the ellipsis below actually reachable. */
+    min-width: 0;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
@@ -803,6 +824,15 @@ body.variant-minimal .player-minimal {
 
 #minimal-artist {
     color: var(--subtext-color);
+}
+
+.minimal-label {
+    /* Smaller as well as muted: this is one line of text, and the label must
+       not crowd out the track name it introduces. */
+    font-size: 0.85em;
+    color: var(--subtext-color);
+    opacity: 0.75;
+    margin-right: 8px;
 }
 
 @keyframes minimal-ping {
